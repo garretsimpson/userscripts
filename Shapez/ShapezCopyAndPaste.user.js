@@ -9,12 +9,6 @@
 // @run-at       document-start
 // ==/UserScript==
 
-/**
- * Process
- * - Register hooks / callbacks in each class that we need to modify (or get internal data)
- * - In the callbacks, add needed methods and store pointers to
- */
-
 (() => {
   "use strict";
 
@@ -26,17 +20,16 @@
         adds: [copy, copyToClipboard],
       },
       pasteBlueprint: {
-        pre: prePasteBlueprint,
+        func: pasteBlueprint,
         adds: [paste, pasteFromClipboard],
       },
     },
     SerializerInternal: {
-      deserializeEntity: { func: deserializeEntity },
-      deserializeEntityArray: { func: deserializeEntityArray },
+      deserializeEntityArray: { adds: [deserializeEntityNoPlace] },
     },
-    Blueprint: { canAfford: { adds: [serialize, deserialize] } },
-    Vector: { fromSerializedObject: {} },
-    XXXX: { getBuildingDataFromCode: {} },
+    Blueprint: { tryPlace: { adds: [serialize, deserialize] } },
+    Vector: { addInplace: {} },
+    StaticMapEntityComponent: { getRotationVariant: {} },
   };
 
   function createHooks() {
@@ -55,7 +48,8 @@
             const fName = this.constructor.name;
             const found = fName == cName || fName == "_" + cName;
             if (!found) {
-              console.log("#####   Skipping:", fName, this);
+              console.log("#####   Skipping:", fName);
+              console.log("#####   ", this, this.constructor.name);
               return;
             }
             console.log("#####   Setting:", hookName);
@@ -107,18 +101,28 @@
       const json = JSON.stringify(serializedBP);
       await copy(json);
       // this.root.soundProxy.playUi(SOUNDS.copy);
-      console.debug("Copied blueprint to clipboard");
+      console.log("Copied blueprint to clipboard");
     } catch (e) {
       console.error("Copy to clipboard failed:", e.message);
     }
   }
 
-  async function prePasteBlueprint() {
-    console.log("##### Called prePasteBlueprint");
-    const blueprint = await this.pasteFromClipboard();
-    if (blueprint != undefined && blueprint != null) {
-      this.lastBlueprintUsed = blueprint;
+  async function pasteBlueprint() {
+    console.log("##### Called pasteBlueprint");
+    let blueprint = await this.pasteFromClipboard();
+    console.log("#####   blueprint:", blueprint);
+    blueprint = blueprint || this.lastBlueprintUsed;
+    if (blueprint !== null) {
+      if (blueprint.layer !== this.root.currentLayer) {
+        this.root.soundProxy.playUiError();
+        return;
+      }
+      this.root.hud.signals.pasteBlueprintRequested.dispatch();
+      this.currentBlueprint.set(blueprint);
+    } else {
+      this.root.soundProxy.playUiError();
     }
+    console.log("##### Exit pasteBlueprint");
   }
 
   async function pasteFromClipboard() {
@@ -127,7 +131,8 @@
     try {
       let data = await paste();
       json = JSON.parse(data.trim());
-      console.debug("Received data from clipboard");
+      console.log("Received data from clipboard");
+      console.log(json);
     } catch (e) {
       console.error("Paste from clipboard failed:", e.message);
     }
@@ -175,7 +180,7 @@
         if (staticData.code == undefined || staticData.origin == undefined) {
           return;
         }
-        const result = serializer.deserializeEntity(root, value);
+        const result = serializer.deserializeEntityNoPlace(root, value);
         if (typeof result === "string") {
           throw new Error(result);
         }
@@ -188,34 +193,23 @@
     }
   }
 
-  function deserializeEntityArray(root, array) {
-    console.log("##### Called deserializeEntityArray");
-    for (let i = 0; i < array.length; ++i) {
-      const serializedEntity = array[i];
-      const result = this.deserializeEntity(root, serializedEntity);
-      if (typeof result === "string") {
-        return result;
-      }
-      result.uid = serializedEntity.uid;
-      root.entityMgr.registerEntity(result, serializedEntity.uid);
-      root.map.placeStaticEntity(result);
-    }
-  }
+  function deserializeEntityNoPlace(root, payload) {
+    console.log("##### Called deserializeEntityNoPlace");
+    const StaticMapEntityComponent =
+      INTERNALS.StaticMapEntityComponent.constructor;
+    const Vector = INTERNALS.Vector.constructor;
 
-  function deserializeEntity(root, payload) {
-    console.log("##### Called deserializeEntity");
     const staticData = payload.components.StaticMapEntity;
-    const code = staticData.code;
-    const data = getBuildingDataFromCode(code);
-    const metaBuilding = data.metaInstance;
-    const Vector = INTERNALS.Vector;
+    const origin = staticData.origin;
+    const sme = new StaticMapEntityComponent({ code: staticData.code });
+    const metaBuilding = sme.getMetaBuilding();
     const entity = metaBuilding.createEntity({
       root,
-      origin: Vector.fromSerializedObject(staticData.origin),
+      origin: new Vector(origin.x || 0, origin.y || 0),
       rotation: staticData.rotation,
       originalRotation: staticData.originalRotation,
-      rotationVariant: data.rotationVariant,
-      variant: data.variant,
+      rotationVariant: sme.getRotationVariant(),
+      variant: sme.getVariant(),
     });
     const errorStatus = this.deserializeComponents(
       root,
