@@ -1,13 +1,20 @@
 // ==UserScript==
 // @name         Shapez copy and paste
-// @version      0.2
-// @domain       https://github.com/garretsimpson/userscripts/tree/main/Shapez
+// @version      0.3
+// @source       https://github.com/garretsimpson/userscripts/tree/main/Shapez
 // @description  Adds clipboard copy and paste to Shapez.io
 // @author       FatCatX
 // @match        *://*.shapez.io/*
 // @grant        unsafeWindow
 // @run-at       document-start
 // ==/UserScript==
+
+/*
+ * Revisions
+ * 0.1 - Original version
+ * 0.2 - Bug fix: Hook functions were not returning results.
+ * 0.3 - Cleanup log messages
+ */
 
 (() => {
   "use strict";
@@ -17,11 +24,11 @@
     HUDBlueprintPlacer: {
       createBlueprintFromBuildings: {
         post: postCreateBlueprintFromBuildings,
-        adds: [copy, copyToClipboard],
+        adds: [copyToClipboard],
       },
       pasteBlueprint: {
         func: pasteBlueprint,
-        adds: [paste, pasteFromClipboard],
+        adds: [pasteFromClipboard],
       },
     },
     SerializerInternal: {
@@ -32,6 +39,11 @@
     StaticMapEntityComponent: { getRotationVariant: {} },
   };
 
+  const SCRIPT_NAME = "CopyAndPaste";
+  function log(...args) {
+    console.debug(SCRIPT_NAME, ...args);
+  }
+
   function createHooks() {
     const { defineProperty, prototype } = unsafeWindow.Object;
     const cNames = Object.keys(HOOKS);
@@ -39,20 +51,19 @@
       const hookNames = Object.keys(HOOKS[cName]);
       for (const hookName of hookNames) {
         const hook = HOOKS[cName][hookName];
-        console.log("##### Adding hook:", cName, hookName);
+        log("Adding hook:", cName, hookName);
         defineProperty(prototype, hookName, {
           __proto__: null,
           configurable: true,
           set: function (oldFunc) {
-            console.log("##### Hook callback:", cName, hookName);
+            log("Hook callback:", cName, hookName);
             const fName = this.constructor.name;
             const found = fName == cName || fName == "_" + cName;
             if (!found) {
-              console.log("#####   Skipping:", fName);
-              console.log("#####   ", this, this.constructor.name);
+              log("  Skipping:", fName);
               return;
             }
-            console.log("#####   Setting:", hookName);
+            log("  Setting:", hookName);
             INTERNALS[cName] = this;
             delete prototype[hookName];
             const preFunc = hook.pre;
@@ -64,6 +75,7 @@
               if (func != undefined) {
                 result = func.call(this, ...args);
               } else {
+                log("calling old function", this, ...args);
                 result = oldFunc.call(this, ...args);
               }
               if (postFunc != undefined) postFunc.call(this, ...args);
@@ -72,7 +84,7 @@
             defineProperty(this, hookName, { value: newFunc });
             if (hook.adds != undefined) {
               for (let addFunc of hook.adds) {
-                console.log("#####   Adding:", addFunc.name);
+                log("  Adding:", addFunc.name);
                 defineProperty(this, addFunc.name, { value: addFunc });
               }
             }
@@ -91,28 +103,24 @@
   }
 
   function postCreateBlueprintFromBuildings(a) {
-    console.log("##### Called postCreateBlueprintFromBuildings");
-    console.log("uids:", JSON.stringify(a));
+    log("uids:", JSON.stringify(a));
     this.copyToClipboard();
   }
 
   async function copyToClipboard() {
-    console.log("##### Called copyToClipboard");
     const serializedBP = this.currentBlueprint.get().serialize();
     try {
       const json = JSON.stringify(serializedBP);
       await copy(json);
       // this.root.soundProxy.playUi(SOUNDS.copy);
-      console.log("Copied blueprint to clipboard");
+      log("Copied data to clipboard");
     } catch (e) {
       console.error("Copy to clipboard failed:", e.message);
     }
   }
 
   async function pasteBlueprint() {
-    console.log("##### Called pasteBlueprint");
     let blueprint = await this.pasteFromClipboard();
-    console.log("#####   blueprint:", blueprint);
     blueprint = blueprint || this.lastBlueprintUsed;
     if (blueprint !== null) {
       if (blueprint.layer !== this.root.currentLayer) {
@@ -124,17 +132,14 @@
     } else {
       this.root.soundProxy.playUiError();
     }
-    console.log("##### Exit pasteBlueprint");
   }
 
   async function pasteFromClipboard() {
-    console.log("##### Called pasteFromClipboard");
     let json;
     try {
       let data = await paste();
+      log("Received data from clipboard");
       json = JSON.parse(data.trim());
-      console.log("Received data from clipboard");
-      console.log(json);
     } catch (e) {
       console.error("Paste from clipboard failed:", e.message);
     }
@@ -143,9 +148,7 @@
   }
 
   function serialize() {
-    console.log("##### Called serialize");
     const SerializerInternal = INTERNALS.SerializerInternal.constructor;
-
     let data = new SerializerInternal().serializeEntityArray(this.entities);
     for (let i = 0; i < data.length; ++i) {
       const entry = data[i];
@@ -156,7 +159,6 @@
   }
 
   function deserialize(root, json) {
-    console.log("##### Called deserialize");
     try {
       if (typeof json != "object") {
         return;
@@ -196,7 +198,6 @@
   }
 
   function deserializeEntityNoPlace(root, payload) {
-    console.log("##### Called deserializeEntityNoPlace");
     const StaticMapEntityComponent =
       INTERNALS.StaticMapEntityComponent.constructor;
     const Vector = INTERNALS.Vector.constructor;
