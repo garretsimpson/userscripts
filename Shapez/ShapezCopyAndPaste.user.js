@@ -59,13 +59,15 @@
             const func = hook.func;
             const postFunc = hook.post;
             const newFunc = function (...args) {
+              let result;
               if (preFunc != undefined) preFunc.call(this, ...args);
               if (func != undefined) {
-                func.call(this, ...args);
+                result = func.call(this, ...args);
               } else {
-                oldFunc.call(this, ...args);
+                result = oldFunc.call(this, ...args);
               }
               if (postFunc != undefined) postFunc.call(this, ...args);
+              return result;
             };
             defineProperty(this, hookName, { value: newFunc });
             if (hook.adds != undefined) {
