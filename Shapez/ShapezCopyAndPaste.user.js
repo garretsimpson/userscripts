@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Shapez copy and paste
-// @version      0.5
+// @version      0.6
 // @source       https://github.com/garretsimpson/userscripts/tree/main/Shapez
 // @description  Adds clipboard copy and paste to Shapez.io
 // @author       FatCatX
 // @match        *://*.shapez.io/*
+// @require      https://unpkg.com/lz-string@1.4.4/libs/lz-string.js
 // @grant        unsafeWindow
 // @run-at       document-start
 // ==/UserScript==
@@ -18,6 +19,7 @@
  * 0.4 - Only store constructors
  *     - Inject fewer functions
  * 0.5 - Remove unneeded elements
+ * 0.6 - Format blueprint data
  */
 
 (() => {
@@ -110,10 +112,48 @@
     oldFunc.call(this, ...args);
   }
 
+  const DATA_TYPE = "Shapez blueprint data";
+  const DATA_VERSION = "0.1";
+  const COMMENT = "#";
+  const EOL = "\n";
+  const MAX_WIDTH = 64;
+
+  function formatData(data) {
+    let result = "";
+    result += COMMENT + EOL;
+    result += COMMENT + " " + "type: " + DATA_TYPE + EOL;
+    result += COMMENT + " " + "version: " + DATA_VERSION + EOL;
+    result += COMMENT + " " + "created: " + new Date() + EOL;
+    result += COMMENT + EOL;
+    result += COMMENT.repeat(5) + " BEGIN DATA " + COMMENT.repeat(5) + EOL;
+    const dataStr = LZString.compressToEncodedURIComponent(data);
+    const numLines = Math.floor(dataStr.length / MAX_WIDTH) + 1;
+    for (let i = 0; i < numLines; i++) {
+      const pos = MAX_WIDTH * i;
+      result += dataStr.substring(pos, pos + MAX_WIDTH) + EOL;
+    }
+    result += COMMENT.repeat(5) + " END DATA " + COMMENT.repeat(5) + EOL;
+    return result;
+  }
+
+  function parseData(data) {
+    const EOL = /\r?\n/;
+    let dataStr = "";
+    const lines = data.split(EOL);
+    for (let line of lines) {
+      line = line.trim();
+      if (line.length == 0 || line.startsWith(COMMENT)) continue;
+      dataStr += line;
+    }
+    const result = LZString.decompressFromEncodedURIComponent(dataStr);
+    if (result == null) console.error("Unable to parse blueprint data.");
+    return result;
+  }
+
   async function copyToClipboard(blueprint) {
     try {
       const json = JSON.stringify(serialize(blueprint.entities));
-      await copy(json);
+      await copy(formatData(json));
       // this.root.soundProxy.playUi(SOUNDS.copy);
       log("Copied data to clipboard");
     } catch (e) {
@@ -126,7 +166,7 @@
     try {
       let data = await paste();
       log("Received data from clipboard");
-      json = JSON.parse(data.trim());
+      json = JSON.parse(parseData(data));
     } catch (e) {
       console.error("Paste from clipboard failed:", e.message);
       return;
