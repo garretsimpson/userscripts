@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Shapez copy and paste
-// @version      0.4
+// @version      0.5
 // @source       https://github.com/garretsimpson/userscripts/tree/main/Shapez
 // @description  Adds clipboard copy and paste to Shapez.io
 // @author       FatCatX
@@ -17,6 +17,7 @@
  *     - Removed pre and post functions
  * 0.4 - Only store constructors
  *     - Inject fewer functions
+ * 0.5 - Remove unneeded elements
  */
 
 (() => {
@@ -142,6 +143,9 @@
       const entry = data[i];
       delete entry.uid;
       delete entry.components.WiredPins;
+      delete entry.components.ItemEjector;
+      delete entry.components.ItemProcessor;
+      delete entry.components.UndergroundBelt;
     }
     return data;
   }
