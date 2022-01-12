@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Shapez copy and paste
-// @version      0.6
+// @version      0.7
 // @source       https://github.com/garretsimpson/userscripts/tree/main/Shapez
 // @description  Adds clipboard copy and paste to Shapez.io
 // @author       FatCatX
@@ -20,6 +20,7 @@
  *     - Inject fewer functions
  * 0.5 - Remove unneeded elements
  * 0.6 - Format blueprint data
+ * 0.7 - Added layer info
  */
 
 (() => {
@@ -118,10 +119,11 @@
   const EOL = "\n";
   const MAX_WIDTH = 64;
 
-  function formatData(data) {
+  function formatData(blueprint, data) {
     let result = "";
     result += COMMENT + EOL;
     result += COMMENT + " " + "type: " + DATA_TYPE + EOL;
+    result += COMMENT + " " + "layer: " + blueprint.layer + EOL;
     result += COMMENT + " " + "version: " + DATA_VERSION + EOL;
     result += COMMENT + " " + "created: " + new Date() + EOL;
     result += COMMENT + EOL;
@@ -153,7 +155,7 @@
   async function copyToClipboard(blueprint) {
     try {
       const json = JSON.stringify(serialize(blueprint.entities));
-      await copy(formatData(json));
+      await copy(formatData(blueprint, json));
       // this.root.soundProxy.playUi(SOUNDS.copy);
       log("Copied data to clipboard");
     } catch (e) {
