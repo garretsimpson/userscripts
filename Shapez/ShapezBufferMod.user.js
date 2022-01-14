@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Shapez buffer mod
-// @version      0.1
+// @version      0.3
 // @source       https://github.com/garretsimpson/userscripts/tree/main/Shapez
 // @description  Adds fill and clear to buffers
 // @author       FatCatX
 // @match        *://*.shapez.io/*
+// @require      https://raw.githubusercontent.com/garretsimpson/userscripts/main/Hooks.js
 // @grant        unsafeWindow
 // @run-at       document-start
 // ==/UserScript==
@@ -12,93 +13,60 @@
 /*
  * Revisions
  * 0.1 - Original version
+ * 0.2 - Import Hooks
+ * 0.3 - Added key bindings
  */
 
 (() => {
   "use strict";
 
-  const INTERNALS = {};
-  const HOOKS = {
+  Hooks.createHooks({
     HUDMassSelector: {
       initialize: { func: initialize, adds: [fillBuffers] },
     },
-  };
+    Keybinding: {
+      getKeyCodeString: {},
+    },
+    KeyActionMapper: {
+      handleKeydown: { adds: [addBinding] },
+    },
+  });
 
   const SCRIPT_NAME = "BufferMod";
   function log(...args) {
     console.debug(SCRIPT_NAME, ...args);
   }
 
-  function createHooks() {
-    const { defineProperty, prototype } = unsafeWindow.Object;
-    const cNames = Object.keys(HOOKS);
-    for (const cName of cNames) {
-      const hookNames = Object.keys(HOOKS[cName]);
-      for (const hookName of hookNames) {
-        const hook = HOOKS[cName][hookName];
-        log("Adding hook:", cName, hookName);
-        const skipList = [];
-        defineProperty(prototype, hookName, {
-          __proto__: null,
-          configurable: true,
-          set: function (oldFunc) {
-            log("Hook callback:", cName, hookName);
-            const fName = this.constructor.name;
-            const found = fName == cName || fName == "_" + cName;
-            if (!found) {
-              log("  Skipping:", fName, oldFunc.name);
-              skipList.push([this, oldFunc]);
-              return;
-            }
-            log("  Setting:", hookName, fName, oldFunc.name);
-            INTERNALS[cName] = this.constructor;
-            const func = hook.func;
-            const newFunc = function (...args) {
-              let result;
-              if (found && func != undefined) {
-                result = func.call(this, oldFunc, ...args);
-              } else {
-                result = oldFunc.call(this, ...args);
-              }
-              return result;
-            };
-            delete prototype[hookName];
-            log("Define:", fName, oldFunc.name, newFunc.name);
-            defineProperty(this, hookName, {
-              configurable: true,
-              enumerable: true,
-              writable: true,
-              value: newFunc,
-            });
-            if (hook.adds != undefined) {
-              for (let addFunc of hook.adds) {
-                log("  Adding:", addFunc.name);
-                defineProperty(this, addFunc.name, { value: addFunc });
-              }
-            }
-            for (const [skip, func] of skipList) {
-              log("Define:", skip.constructor.name, func.name);
-              defineProperty(skip, hookName, {
-                configurable: true,
-                enumerable: true,
-                writable: true,
-                value: func,
-              });
-            }
-          },
-        });
-      }
-    }
+  function key(str) {
+    return str.toUpperCase().charCodeAt(0);
+  }
+
+  const KEY_MAP = {
+    fillBuffers: { keyCode: key("n") },
+  };
+  for (const id in KEY_MAP) {
+    KEY_MAP[id].id = id;
   }
 
   function initialize(oldFunc, ...args) {
     log("Calling initialize");
     oldFunc.call(this, ...args);
+
+    for (const id in KEY_MAP) {
+      addBinding.call(this.root.keyMapper, id, KEY_MAP[id]);
+    }
+    this.root.keyMapper
+      .getBinding(KEY_MAP.fillBuffers)
+      .add(this.fillBuffers, this);
+  }
+
+  function addBinding(id, val) {
+    const Keybinding = Hooks.getConstructor("Keybinding");
+    let payload = Object.assign({}, KEY_MAP[id]);
+    this.keybindings[id] = new Keybinding(this, this.root.app, payload);
   }
 
   function fillBuffers() {
     log("Calling fillBuffers");
   }
-
-  createHooks();
 })();
