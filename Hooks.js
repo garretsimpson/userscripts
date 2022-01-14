@@ -14,16 +14,16 @@
  */
 
 const Hooks = (() => {
+  const SCRIPT_NAME = "Hooks";
   function log(...args) {
-    const SCRIPT_NAME = "Hooks";
     console.debug(SCRIPT_NAME, ...args);
   }
 
-  const INTERNALS = {};
+  const constructors = {};
 
   const Hooks = {
-    getInternals: function () {
-      return INTERNALS;
+    getConstructor: function (name) {
+      return constructors[name];
     },
 
     createHooks: function (hooks) {
@@ -48,7 +48,7 @@ const Hooks = (() => {
                 return;
               }
               log("  Found:", fName, oldFunc.name);
-              INTERNALS[cName] = this.constructor;
+              constructors[cName] = this.constructor;
               delete prototype[hookName];
               let func =
                 hook.func == undefined
