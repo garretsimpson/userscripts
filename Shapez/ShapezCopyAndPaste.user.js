@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         Shapez copy and paste
-// @version      0.7
+// @version      0.8
 // @source       https://github.com/garretsimpson/userscripts/tree/main/Shapez
 // @description  Adds clipboard copy and paste to Shapez.io
 // @author       FatCatX
 // @match        *://*.shapez.io/*
 // @require      https://unpkg.com/lz-string@1.4.4/libs/lz-string.js
+// @require      https://raw.githubusercontent.com/garretsimpson/userscripts/main/Hooks.js
 // @grant        unsafeWindow
 // @run-at       document-start
 // ==/UserScript==
@@ -21,13 +22,18 @@
  * 0.5 - Remove unneeded elements
  * 0.6 - Format blueprint data
  * 0.7 - Added layer info
+ * 0.8 - Use Hooks library
  */
 
 (() => {
   "use strict";
 
-  const INTERNALS = {};
-  const HOOKS = {
+  const SCRIPT_NAME = "CopyAndPaste";
+  function log(...args) {
+    console.debug(SCRIPT_NAME, ...args);
+  }
+
+  Hooks.createHooks({
     HUDBlueprintPlacer: {
       createBlueprintFromBuildings: {
         func: createBlueprintFromBuildings,
@@ -42,57 +48,7 @@
     StaticMapEntityComponent: { getRotationVariant: {} },
     Blueprint: { tryPlace: {} },
     Vector: { addInplace: {} },
-  };
-
-  const SCRIPT_NAME = "CopyAndPaste";
-  function log(...args) {
-    console.debug(SCRIPT_NAME, ...args);
-  }
-
-  function createHooks() {
-    const { defineProperty, prototype } = unsafeWindow.Object;
-    const cNames = Object.keys(HOOKS);
-    for (const cName of cNames) {
-      const hookNames = Object.keys(HOOKS[cName]);
-      for (const hookName of hookNames) {
-        const hook = HOOKS[cName][hookName];
-        log("Adding hook:", cName, hookName);
-        defineProperty(prototype, hookName, {
-          __proto__: null,
-          configurable: true,
-          set: function (oldFunc) {
-            log("Hook callback:", cName, hookName);
-            const fName = this.constructor.name;
-            const found = fName == cName || fName == "_" + cName;
-            if (!found) {
-              log("  Skipping:", fName);
-              return;
-            }
-            log("  Setting:", hookName);
-            INTERNALS[cName] = this.constructor;
-            const func = hook.func;
-            const newFunc = function (...args) {
-              let result;
-              if (func != undefined) {
-                result = func.call(this, oldFunc, ...args);
-              } else {
-                result = oldFunc.call(this, ...args);
-              }
-              return result;
-            };
-            delete prototype[hookName];
-            defineProperty(this, hookName, { value: newFunc });
-            if (hook.adds != undefined) {
-              for (let addFunc of hook.adds) {
-                log("  Adding:", addFunc.name);
-                defineProperty(this, addFunc.name, { value: addFunc });
-              }
-            }
-          },
-        });
-      }
-    }
-  }
+  });
 
   async function copy(text) {
     return navigator.clipboard.writeText(text);
@@ -178,9 +134,8 @@
   }
 
   function serialize(entities) {
-    let data = new INTERNALS.SerializerInternal().serializeEntityArray(
-      entities
-    );
+    const SerializerInternal = Hooks.getConstructor("SerializerInternal");
+    let data = new SerializerInternal().serializeEntityArray(entities);
     for (let i = 0; i < data.length; ++i) {
       const entry = data[i];
       delete entry.uid;
@@ -200,7 +155,10 @@
       if (!Array.isArray(json)) {
         return;
       }
-      const serializer = new INTERNALS.SerializerInternal();
+      const SerializerInternal = Hooks.getConstructor("SerializerInternal");
+      const Blueprint = Hooks.getConstructor("Blueprint");
+
+      const serializer = new SerializerInternal();
       /** @type {Array<Entity>} */
       const entityArray = [];
       for (let i = 0; i < json.length; ++i) {
@@ -222,22 +180,27 @@
         }
         entityArray.push(result);
       }
-      return new INTERNALS.Blueprint(entityArray);
+      return new Blueprint(entityArray);
     } catch (e) {
       console.error("Invalid blueprint data:", e.message);
     }
   }
 
   function deserializeEntityNoPlace(root, payload) {
+    const StaticMapEntityComponent = Hooks.getConstructor(
+      "StaticMapEntityComponent"
+    );
+    const Vector = Hooks.getConstructor("Vector");
+
     const staticData = payload.components.StaticMapEntity;
     const origin = staticData.origin;
-    const sme = new INTERNALS.StaticMapEntityComponent({
+    const sme = new StaticMapEntityComponent({
       code: staticData.code,
     });
     const metaBuilding = sme.getMetaBuilding();
     const entity = metaBuilding.createEntity({
       root,
-      origin: new INTERNALS.Vector(origin.x || 0, origin.y || 0),
+      origin: new Vector(origin.x || 0, origin.y || 0),
       rotation: staticData.rotation,
       originalRotation: staticData.originalRotation,
       rotationVariant: sme.getRotationVariant(),
@@ -250,6 +213,4 @@
     );
     return errorStatus || entity;
   }
-
-  createHooks();
 })();
