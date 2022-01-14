@@ -57,11 +57,6 @@ const Hooks = (() => {
                       return hook.func.call(this, oldFunc, ...args);
                     };
               funcList.push([this, func]);
-              if (hook.adds != undefined) {
-                for (let addFunc of hook.adds) {
-                  funcList.push([this, addFunc]);
-                }
-              }
               for (const [proto, func] of funcList) {
                 defineProperty(proto, hookName, {
                   configurable: true,
@@ -69,6 +64,12 @@ const Hooks = (() => {
                   writable: true,
                   value: func,
                 });
+              }
+              if (hook.adds != undefined) {
+                for (let addFunc of hook.adds) {
+                  log("  Adding:", addFunc.name);
+                  defineProperty(this, addFunc.name, { value: addFunc });
+                }
               }
             },
           });
