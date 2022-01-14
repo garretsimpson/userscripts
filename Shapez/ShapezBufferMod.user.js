@@ -53,14 +53,14 @@
     oldFunc.call(this, ...args);
 
     for (const id in KEY_MAP) {
-      addBinding.call(this.root.keyMapper, id, KEY_MAP[id]);
+      addBinding.call(this.root.keyMapper, id);
     }
     this.root.keyMapper
       .getBinding(KEY_MAP.fillBuffers)
       .add(this.fillBuffers, this);
   }
 
-  function addBinding(id, val) {
+  function addBinding(id) {
     const Keybinding = Hooks.getConstructor("Keybinding");
     let payload = Object.assign({}, KEY_MAP[id]);
     this.keybindings[id] = new Keybinding(this, this.root.app, payload);
