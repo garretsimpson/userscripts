@@ -3,7 +3,7 @@
 // @version      0.4
 // @source       https://github.com/garretsimpson/userscripts/tree/main/Shapez
 // @description  Adds fill and clear to buffers
-// @author       FatCatX
+// @author       FatCatX and SkimnerPhi
 // @match        *://*.shapez.io/*
 // @require      https://raw.githubusercontent.com/garretsimpson/userscripts/main/Hooks.js
 // @grant        unsafeWindow
